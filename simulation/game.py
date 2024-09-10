@@ -10,7 +10,7 @@ pygame.init()
 # Constants
 WIDTH, HEIGHT = 1200, 600
 NODE_RADIUS = 15
-FPS = 60
+FPS = 150
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -129,8 +129,16 @@ class Game:
     def find_path_and_init_packet(self):
         # Determine the shortest path from a core switch to Server 1
         core_switch = next(node for node in self.nodes if node.nodeType == 'cs')
-        server_1 = next(node for node in self.nodes if node.nodeType == 'server' and node.index == 1)
-        path = nx.shortest_path(self.network, source=core_switch, target=server_1)
+        server_0 = next(node for node in self.nodes if node.nodeType == 'server' and node.index == 0 and node.pod == 0)
+        path = nx.shortest_path(self.network, source=core_switch, target=server_0)
+        for i in range(1, 16):
+            server = next(node for node in self.nodes if node.nodeType == 'server' and node.index == i % 4 and node.pod == i // 4)
+            path += nx.shortest_path(self.network, source=server_0, target=server)[1:]
+            server_0 = server
+
+        # print(path)
+
+        # print([node.index for node in self.nodes if node.nodeType == 'server'])
 
         # Convert path to a list of Node objects for pygame
         path_nodes = [self.nodes[node] for node in path]
