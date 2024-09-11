@@ -10,13 +10,14 @@ pygame.init()
 # Constants
 WIDTH, HEIGHT = 1200, 600
 NODE_RADIUS = 15
-FPS = 150
+FPS = 120
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
 GRAY = (100, 100, 100)
+YELLOW = (255, 255, 0)
 
 # Initialize the game window
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -24,11 +25,9 @@ pygame.display.set_caption("Data Center Topology Visualization")
 
 class Packet:
     def __init__(self, node):
-        self.path = [node]
-        self.current_index = 0
-        self.x, self.y = self.path[0].x, self.path[0].y
-        self.speed = 2 
-        self.node = self.path[0]
+        self.x, self.y = node.x, node.y  # Start packet at the initial node's position
+        self.speed = 1
+        self.target_node = node  # The target node the packet is moving towards
         self.latency = 0
 
     def move(self, action):
@@ -37,17 +36,16 @@ class Packet:
         dy = next_node.y - self.y
         distance = (dx**2 + dy**2) ** 0.5
 
+        # Move towards the next node
         if distance > 0:
             self.x += self.speed * dx / distance
             self.y += self.speed * dy / distance
-            self.node = next_node
-            self.path.append(next_node)
             self.latency += 1
 
-            # Check if packet has reached the next node
-            if abs(self.x - next_node.x) < 1 and abs(self.y - next_node.y) < 1:
-                self.x, self.y = next_node.x, next_node.y
-
+        # Check if packet has reached the next node
+        if abs(self.x - next_node.x) < 1 and abs(self.y - next_node.y) < 1:
+            self.x, self.y = next_node.x, next_node.y
+            self.target_node = next_node
 
     def draw(self, screen):
         pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), 5)
@@ -61,7 +59,7 @@ class Node:
         self.nodeType = nodeType
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (self.x, self.y), NODE_RADIUS, 0, draw_top_right=True, draw_top_left=True, draw_bottom_left=True, draw_bottom_right=True)
+        pygame.draw.circle(screen, self.color, (self.x, self.y), NODE_RADIUS)
 
 # Define Edge class for pygame
 class Edge:
@@ -80,18 +78,16 @@ class Game:
         self.nodes = {}
         self.edges = []
         self.possible_actions = {}
-        self.coordinates_to_nodes = {}
         self.clock = pygame.time.Clock()
         self.populate_nodes()
         self.packet = Packet(self.nodes[next(node for node in self.nodes if node.nodeType == 'cs')])
-        
+        # self.initial()
+
     def reset(self):
         self.packet = Packet(self.nodes[next(node for node in self.nodes if node.nodeType == 'cs')])
         self.packet.latency = 0
 
-
     def populate_nodes(self):
-        # Create node objects for pygame
         spacing_y = HEIGHT // 6
 
         # Define the number of nodes in each layer
@@ -127,11 +123,9 @@ class Game:
             elif node.nodeType == 'es':
                 color = GREEN
             else:
-                color = BLACK  # server
+                color = YELLOW  # server
 
-            # Create the node and update position trackers
             self.nodes[node] = Node(x, y, color, node.nodeType)
-            self.coordinates_to_nodes[(x, y)] = self.nodes[node]
             x_positions[node.nodeType] += 4 * NODE_RADIUS
 
         # Prepare edges for rendering
@@ -143,21 +137,10 @@ class Game:
             neighbours = list(self.network.neighbors(node))
             self.possible_actions[self.nodes[node]] = [self.nodes[neighs] for neighs in neighbours]
 
-        # print(self.possible_actions)
-
-    # def find_path_and_init_packet(self):
-    #     # Determine the shortest path from a core switch to Server 1
-    #     core_switch = next(node for node in self.nodes if node.nodeType == 'cs')
-    #     server_0 = next(node for node in self.nodes if node.nodeType == 'server' and node.index == 0 and node.pod == 0)
-    #     path = nx.shortest_path(self.network, source=core_switch, target=server_0)
-    #     for i in range(1, 16):
-    #         server = next(node for node in self.nodes if node.nodeType == 'server' and node.index == i % 4 and node.pod == i // 4)
-    #         path += nx.shortest_path(self.network, source=server_0, target=server)[1:]
-    #         server_0 = server
-    #     path_nodes = [self.nodes[node] for node in path]
-    #     self.packet = Packet(path_nodes)
-
     def draw(self, screen):
+        # Redraw background, nodes, and edges to avoid trailing packets
+        screen.fill(WHITE)
+
         # Draw edges
         for edge in self.edges:
             edge.draw(screen)
@@ -166,61 +149,42 @@ class Game:
         for node in self.nodes.values():
             node.draw(screen)
 
-        # Draw and move the packet
+        # Draw packet
         if self.packet:
             self.packet.draw(screen)
 
     def play_step(self, action):
-        # Update the packet's path based on the chosen action
+        # Move the packet
         self.packet.move(action)
 
-        # draw
+        # Draw everything
         self.draw(screen)
         pygame.display.flip()
         self.clock.tick(FPS)
 
-        # Get the reward
-        reward = 0
-        done = False
-        # if the path length is more than 10, give a negative reward
-        if len(self.packet.path) > 10:
-            reward = -100
-            done = True
-        elif self.packet.node.nodeType == 'cs':
+        reward, done = 0, False
+        if action.nodeType == 'cs':
             reward = -self.packet.latency
             done = True
 
         return reward, done
+    
+    def initial(self):
+        while True:
+            # Simulate moving to an action (as an example)
+            self.play_step(self.nodes[next(node for node in self.nodes if node.nodeType == 'as')])
 
+def main():
+    k = 4
+    network = nx.Graph()
+    dc_topology(network, k)
 
+    game = Game(network)
 
+    while True:
+        game.play_step(game.nodes[next(node for node in game.nodes if node.nodeType == 'as')])
 
+    pygame.quit()
 
-
-
-# def main():
-#     k = 4
-#     network = nx.Graph()
-#     dc_topology(network, k)
-
-#     game = Game(network)
-
-#     clock = pygame.time.Clock()
-#     running = True
-#     while running:
-#         screen.fill(WHITE)
-
-#         for event in pygame.event.get():
-#             if event.type == pygame.QUIT:
-#                 running = False
-
-#         # Draw the topology and animate packet movement
-#         game.draw(screen)
-
-#         pygame.display.flip()
-#         clock.tick(FPS)
-
-#     pygame.quit()
-
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()

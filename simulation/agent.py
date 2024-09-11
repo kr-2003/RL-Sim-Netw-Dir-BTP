@@ -24,7 +24,7 @@ class Agent:
 
 
     def get_state(self, game):
-        current_node = game.packet.node
+        current_node = game.packet.target_node
 
         state = current_node
 
@@ -62,6 +62,7 @@ class Agent:
             # print(move)
             final_move = move
 
+        print(final_move)
         return final_move
 
 
@@ -77,41 +78,50 @@ def train():
     game = Game(network)
 
     while True:
-        # get old state
         node_old, state_old = agent.get_state(game)
-
-        # get move
+        game.clock.tick(60)
         final_move = agent.get_action(node_old, state_old, game)
+        game.play_step(game.nodes[next(node for node in game.nodes if node.nodeType == 'as')])
 
-        node = game.possible_actions[node_old][final_move]
+        # get old state
+        # node_old, state_old = agent.get_state(game)
 
-        # perform move and get new state
-        reward, done = game.play_step(node)
-        node_new, state_new = agent.get_state(game)
+        # # get move
+        # final_move = agent.get_action(node_old, state_old, game)
 
-        # train short memory
-        agent.train_short_memory(state_old, final_move, reward, state_new, done)
+        # node = game.possible_actions[node_old][final_move]
+        # print(node_old.nodeType)
+        # print(node.nodeType)
 
-        # remember
-        agent.remember(state_old, final_move, reward, state_new, done)
+        # # perform move and get new state
+        # reward, done = game.play_step(node)
+        # node_new, state_new = agent.get_state(game)
 
-        if done:
-            # train long memory, plot result
-            game.reset()
-            agent.n_games += 1
-            agent.train_long_memory()
+        # # train short memory
+        # agent.train_short_memory(state_old, final_move, reward, state_new, done)
 
-            if reward < record:
-                record = reward
-                agent.model.save()
+        # # remember
+        # agent.remember(state_old, final_move, reward, state_new, done)
 
-            print('Game', agent.n_games, 'Latency', reward, 'Record:', record)
+        # print(done)
 
-            plot_scores.append(reward)
-            total_score += reward
-            mean_score = total_score / agent.n_games
-            plot_mean_scores.append(mean_score)
-            plot(plot_scores, plot_mean_scores)
+        # if done:
+        #     # train long memory, plot result
+        #     game.reset()
+        #     agent.n_games += 1
+        #     agent.train_long_memory()
+
+        #     if reward < record:
+        #         record = reward
+        #         agent.model.save()
+
+        #     print('Game', agent.n_games, 'Latency', reward, 'Record:', record)
+
+        #     plot_scores.append(reward)
+        #     total_score += reward
+        #     mean_score = total_score / agent.n_games
+        #     plot_mean_scores.append(mean_score)
+        #     # plot(plot_scores, plot_mean_scores)
 
 
 if __name__ == '__main__':
