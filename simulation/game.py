@@ -10,7 +10,7 @@ pygame.init()
 # Constants
 WIDTH, HEIGHT = 1200, 600
 NODE_RADIUS = 15
-FPS = 200
+FPS = 300
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -25,30 +25,26 @@ pygame.display.set_caption("Data Center Topology Visualization")
 class Packet:
     def __init__(self, node):
         self.x, self.y = node.x, node.y  # Start packet at the initial node's position
-        self.speed = 5  # Increase speed for faster movement
+        self.speed = 2  # Increase speed for faster movement
         self.target_node = node  # The target node the packet is moving towards
         self.latency = 0
         self.reached_target = True  # Flag to check if the packet has reached the target node
 
+    
     def move(self, action):
         next_node = action
         dx = next_node.x - self.x
         dy = next_node.y - self.y
         distance = (dx**2 + dy**2) ** 0.5
 
-        # Move towards the next node
         if distance > 0:
             self.x += self.speed * dx / distance
             self.y += self.speed * dy / distance
             self.latency += 1
 
-        # Check if packet has reached the next node
         if abs(self.x - next_node.x) < 1 and abs(self.y - next_node.y) < 1:
             self.x, self.y = next_node.x, next_node.y
             self.target_node = next_node
-            self.reached_target = True  # Set flag to true when target is reached
-        else:
-            self.reached_target = False  # Still moving towards the target
 
     def draw(self, screen):
         pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), 5)
@@ -164,12 +160,12 @@ class Game:
         # Draw everything
         self.draw(screen)
         pygame.display.flip()
-        # self.clock.tick(FPS)
+        self.clock.tick(FPS)
 
         reward, done = 0, False
-        if action.nodeType == 'cs':
+        if action.nodeType == 'server':
             reward = -self.packet.latency
-            done = False
+            done = True
 
         return reward, done
     
