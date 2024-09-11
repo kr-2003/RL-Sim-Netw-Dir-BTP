@@ -16,55 +16,46 @@ class Agent:
 
     def __init__(self):
         self.n_games = 0
-        self.epsilon = 0 # randomness
-        self.gamma = 0.9 # discount rate
-        self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        self.model = Linear_QNet(2, 2, 2)
+        self.epsilon = 0  # randomness
+        self.gamma = 0.9  # discount rate
+        self.memory = deque(maxlen=MAX_MEMORY)  # popleft()
+        self.model = Linear_QNet(2, 2, 4)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
-
 
     def get_state(self, game):
         current_node = game.packet.target_node
-
         state = current_node
-
         return current_node, np.array([state.x, state.y])
 
     def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done)) # popleft if MAX_MEMORY is reached
+        self.memory.append((state, action, reward, next_state, done))  # popleft if MAX_MEMORY is reached
 
     def train_long_memory(self):
         if len(self.memory) > BATCH_SIZE:
-            mini_sample = random.sample(self.memory, BATCH_SIZE) # list of tuples
+            mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
         else:
             mini_sample = self.memory
-
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         self.trainer.train_step(states, actions, rewards, next_states, dones)
-        #for state, action, reward, nexrt_state, done in mini_sample:
-        #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self, state, action, reward, next_state, done):
         self.trainer.train_step(state, action, reward, next_state, done)
 
     def get_action(self, node, state, game):
-        # random moves: tradeoff exploration / exploitation
-        self.epsilon = 80 - self.n_games
+        self.epsilon = 80 - self.n_games  # Random moves: tradeoff exploration / exploitation
         final_move = None
-        all_possible_moves_at_current_state = game.possible_actions[node]
+        all_possible_moves = game.possible_actions[node]
+
         if random.randint(0, 200) < self.epsilon:
-            move = random.choice(all_possible_moves_at_current_state)
-            final_move = all_possible_moves_at_current_state.index(move)
+            move = random.choice(all_possible_moves)
+            final_move = all_possible_moves.index(move)
         else:
-            # print(state)
             prediction = self.model(torch.tensor(state, dtype=torch.float))
             move = torch.argmax(prediction).item()
-            # print(move)
             final_move = move
 
-        print(final_move)
+        print(f"Action chosen: {final_move}")
         return final_move
-
 
 def train():
     k = 4
@@ -79,50 +70,44 @@ def train():
 
     while True:
         node_old, state_old = agent.get_state(game)
-        game.clock.tick(60)
         final_move = agent.get_action(node_old, state_old, game)
-        game.play_step(game.nodes[next(node for node in game.nodes if node.nodeType == 'as')])
 
-        # get old state
-        # node_old, state_old = agent.get_state(game)
+        # Get the next target node based on the move
+        if node_old.nodeType == 'server':
+            node = game.possible_actions[node_old][0]
+        else:
+            node = game.possible_actions[node_old][final_move]
 
-        # # get move
-        # final_move = agent.get_action(node_old, state_old, game)
+        # Move the packet and wait until it reaches the target
+        while node_old==game.packet.target_node:
+            game.play_step(node)  # Move towards the target
+            game.clock.tick(60)   # Control the speed (optional)
 
-        # node = game.possible_actions[node_old][final_move]
-        # print(node_old.nodeType)
-        # print(node.nodeType)
+        # Perform the action and compute the new state
+        reward, done = game.play_step(node)
+        node_new, state_new = agent.get_state(game)
 
-        # # perform move and get new state
-        # reward, done = game.play_step(node)
-        # node_new, state_new = agent.get_state(game)
+        # Train the agent with the short memory
+        agent.train_short_memory(state_old, final_move, reward, state_new, done)
 
-        # # train short memory
-        # agent.train_short_memory(state_old, final_move, reward, state_new, done)
+        # Remember the experience for long-term memory
+        agent.remember(state_old, final_move, reward, state_new, done)
 
-        # # remember
-        # agent.remember(state_old, final_move, reward, state_new, done)
+        if done:
+            game.reset()
+            agent.n_games += 1
+            agent.train_long_memory()
 
-        # print(done)
+            if reward < record:
+                record = reward
+                agent.model.save()
 
-        # if done:
-        #     # train long memory, plot result
-        #     game.reset()
-        #     agent.n_games += 1
-        #     agent.train_long_memory()
+            print(f'Game {agent.n_games}, Latency: {reward}, Record: {record}')
 
-        #     if reward < record:
-        #         record = reward
-        #         agent.model.save()
-
-        #     print('Game', agent.n_games, 'Latency', reward, 'Record:', record)
-
-        #     plot_scores.append(reward)
-        #     total_score += reward
-        #     mean_score = total_score / agent.n_games
-        #     plot_mean_scores.append(mean_score)
-        #     # plot(plot_scores, plot_mean_scores)
-
+            plot_scores.append(reward)
+            total_score += reward
+            mean_score = total_score / agent.n_games
+            plot_mean_scores.append(mean_score)
 
 if __name__ == '__main__':
     train()
